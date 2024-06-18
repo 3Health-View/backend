@@ -65,14 +65,13 @@ def handle_login():
 def handle_signup():
     try:
         data = request.json
-        required_fields = ['email', 'firstName', 'lastName', 'username', 'password']
+        required_fields = ['email', 'firstName', 'lastName', 'password']
         if all(field in data for field in required_fields):
             user = users_ref.where('email', '==', data['email']).limit(1).get()
             if not user:
                 user_obj = UserModel(email=data['email'],
                                      first_name=data['firstName'],
                                      last_name=data['lastName'],
-                                     username=data['username'],
                                      password=bcrypt.generate_password_hash(data['password']).decode('utf-8'))
                 
                 users_ref.add(user_obj.to_dict())
@@ -94,7 +93,6 @@ def handle_signup():
                     mimetype='application/json'
                 )
             else:
-                print(user)
                 return Response(
                     response=json.dumps({'message': "User already exists."}),
                     status=409,
