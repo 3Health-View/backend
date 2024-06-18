@@ -1,0 +1,7 @@
+firebase_admin
+flask
+flask-bcrypt
+flask-cors
+PyJWT
+python-dotenv
+requests
