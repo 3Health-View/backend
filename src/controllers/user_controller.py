@@ -12,11 +12,54 @@ users_ref = db.collection('users')
 
 @users.route("/login", methods = ["POST"])
 def handle_login():
-    return Response(
-        response=json.dumps({'message': "success"}),
-        status=200,
-        mimetype='application/json'
-    )
+    try:
+        data = request.json
+        required_fields = ['email', 'password']
+        if all(field in data for field in required_fields):
+            user = users_ref.where('email', '==', data['email']).limit(1).get()
+            if user:
+                user_obj = user[0].to_dict()
+                if bcrypt.check_password_hash(user_obj.get('password'), data['password']):
+                    payload = {
+                        'iat': datetime.now(timezone.utc),
+                        'email': user_obj.get('email'),
+                        'firstName': user_obj.get('first_name'),
+                        'lastName': user_obj.get('last_name'),
+                        'oura_token': user_obj.get('oura_token'),
+                        'oura_refresh': user_obj.get('oura_refresh')
+                    }
+
+                    token = jwt.encode(payload, os.getenv('SECRET_KEY'), algorithm='HS256')
+
+                    return Response(
+                        response=json.dumps({'message': "User Sign In Successful", 'token': token}),
+                        status=200,
+                        mimetype='application/json'
+                    )
+                else:
+                    return Response(
+                        response=json.dumps({'message': "Incorrect Password"}),
+                        status=401,
+                        mimetype='application/json'
+                    )
+            else:
+                return Response(
+                    response=json.dumps({'message': "User does not exist"}),
+                    status=404,
+                    mimetype='application/json'
+                )
+        else:
+            return Response(
+                response=json.dumps({'message': "[email, password] is required!"}),
+                status=400,
+                mimetype='application/json'
+            )
+    except Exception as e:
+        return Response(
+            response= json.dumps({'message': "Error has occurred", 'error': str(e)}),
+            status=500,
+            mimetype='application/json'
+        )
 
 @users.route('/signup', methods = ["POST"])
 def handle_signup():
@@ -59,7 +102,7 @@ def handle_signup():
                 )
         else:
             return Response(
-                response=json.dumps({'message': "[email, firstName, lastName, username, password] are required"}),
+                response=json.dumps({'message': "[email, firstName, lastName, username, password] are required!"}),
                 status=400,
                 mimetype='application/json'
             )
