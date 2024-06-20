@@ -3,6 +3,7 @@ from flask import request, Response, json, Blueprint
 from flask_bcrypt import Bcrypt
 import jwt
 import os
+import time
 from src.models.user_model import UserModel
 from src.db.firestore import db
 
@@ -22,11 +23,12 @@ def handle_login():
                 if bcrypt.check_password_hash(user_obj.get('password'), data['password']):
                     payload = {
                         'iat': datetime.now(timezone.utc),
+                        'exp': time.time() + 86400,
                         'email': user_obj.get('email'),
-                        'firstName': user_obj.get('first_name'),
-                        'lastName': user_obj.get('last_name'),
-                        'oura_token': user_obj.get('oura_token'),
-                        'oura_refresh': user_obj.get('oura_refresh')
+                        'firstName': user_obj.get('firstName'),
+                        'lastName': user_obj.get('lastName'),
+                        'oura_token': user_obj.get('ouraToken'),
+                        'oura_refresh': user_obj.get('ouraRefresh')
                     }
 
                     token = jwt.encode(payload, os.getenv('SECRET_KEY'), algorithm='HS256')
@@ -78,6 +80,7 @@ def handle_signup():
 
                 payload = {
                     'iat': datetime.now(timezone.utc),
+                    'exp': time.time() + 86400,
                     'email': user_obj.email,
                     'firstName': user_obj.first_name,
                     'lastName': user_obj.last_name,
