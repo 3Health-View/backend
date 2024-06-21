@@ -119,6 +119,69 @@ def handle_signup():
             mimetype='application/json'
         )
 
+@users.route('/update-oura', methods = ["PATCH"])
+def update_oura():
+    try:
+        data = request.json
+
+        full_token = request.headers.get('Authorization')
+        token = full_token.split(" ")[1]
+        decoded = jwt.decode(token, os.getenv('SECRET_KEY'), algorithms='HS256')
+
+        if(time.time() > decoded.get('exp')):
+            return Response(
+                response=json.dumps({'message': "Token has expired"}),
+                status=401,
+                mimetype='application/json'
+            )
+        
+        required_fields = ['ouraToken', 'ouraRefresh']
+        if all(field in data for field in required_fields):
+            user = users_ref.where('email', '==', decoded.get("email")).limit(1).get()
+
+            if user:
+                user_doc_ref = users_ref.document(user[0].id)
+                user_doc_ref.update({'ouraToken': data['ouraToken'], 'ouraRefresh': data['ouraRefresh']})
+                new_user_obj = user_doc_ref.get().to_dict()
+
+                payload = {
+                    'iat': datetime.now(timezone.utc),
+                    'exp': time.time() + 86400,
+                    'email': new_user_obj.get('email'),
+                    'firstName': new_user_obj.get('firstName'),
+                    'lastName': new_user_obj.get('lastName'),
+                    'oura_token': new_user_obj.get('ouraToken'),
+                    'oura_refresh': new_user_obj.get('ouraRefresh')
+                }
+
+                token = jwt.encode(payload, os.getenv('SECRET_KEY'), algorithm='HS256')
+
+                return Response(
+                    response=json.dumps({'message': "User Oura Tokens Updated", 'token': token}),
+                    status=200,
+                    mimetype='application/json'
+                )
+            else:
+                return Response(
+                    response=json.dumps({'message': "User does not exist"}),
+                    status=404,
+                    mimetype='application/json'
+                )
+        else:
+            return Response(
+                response=json.dumps({'message': "[ouraToken, ouraRefresh] is required!"}),
+                status=400,
+                mimetype='application/json'
+            )
+        
+    except Exception as e:
+        return Response(
+            response= json.dumps({'message': "Error has occurred", 'error': str(e)}),
+            status=500,
+            mimetype='application/json'
+        )
+
+
 @users.route('/get-token', methods = ["POST"])
 def get_token():
     try:
