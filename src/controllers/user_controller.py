@@ -1,11 +1,16 @@
 from datetime import datetime, timezone
+from dotenv import load_dotenv
 from flask import request, Response, json, Blueprint
 from flask_bcrypt import Bcrypt
 import jwt
 import os
+import requests
+from requests.auth import HTTPBasicAuth
 import time
 from src.models.user_model import UserModel
 from src.db.firestore import db
+
+load_dotenv()
 
 bcrypt = Bcrypt()
 users = Blueprint('users', __name__)
@@ -110,6 +115,58 @@ def handle_signup():
     except Exception as e:
         return  Response(
             response= json.dumps({'message': "Error has occurred", 'error': str(e)}),
+            status=500,
+            mimetype='application/json'
+        )
+
+@users.route('/get-token', methods = ["POST"])
+def get_token():
+    try:
+        data = request.json
+        required_fields = ['code', 'redirectUrl']
+        if all(field in data for field in required_fields):
+            url = f"https://api.ouraring.com/oauth/token?grant_type=authorization_code&code={data['code']}&redirect_uri={data['redirectUrl']}"
+            resp = requests.post(url, auth=HTTPBasicAuth(os.getenv('CLIENT_ID'), os.getenv('CLIENT_SECRET')))
+            return Response(
+                response=json.dumps(resp.json()),
+                status=resp.status_code,
+                mimetype='application/json'
+            )
+        else:
+            return Response(
+                response=json.dumps({'message': "[code, redirectUrl] is required!"}),
+                status=400,
+                mimetype='application/json'
+            )
+    except Exception as e:
+        return Response(
+            response=json.dumps({'message': "Error has occurred", 'error': str(e)}),
+            status=500,
+            mimetype='application/json'
+        )
+    
+@users.route('/refresh-token', methods = ["POST"])
+def refresh_token():
+    try:
+        data = request.json
+        required_fields = ['refreshToken']
+        if all(field in data for field in required_fields):
+            url = f"https://api.ouraring.com/oauth/token?grant_type=refresh_token&refresh_token={data['refreshToken']}"
+            resp = requests.post(url, auth=HTTPBasicAuth(os.getenv('CLIENT_ID'), os.getenv('CLIENT_SECRET')))
+            return Response(
+                response=json.dumps(resp.json()),
+                status=resp.status_code,
+                mimetype='application/json'
+            )
+        else:
+            return Response(
+                response=json.dumps({'message': "[code, redirectUrl] is required!"}),
+                status=400,
+                mimetype='application/json'
+            )
+    except Exception as e:
+        return Response(
+            response=json.dumps({'message': "Error has occurred", 'error': str(e)}),
             status=500,
             mimetype='application/json'
         )
