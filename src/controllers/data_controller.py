@@ -88,11 +88,11 @@ def getScores():
                 })
 
             df_display = pd.DataFrame(records)
-            update_db(df_display, display_info, {})
-            update_db(df_main, main_raw, {'email':email})
-            update_db(df_sleep, sleep_raw, {'email':email})
-            update_db(df_activity, activity_raw, {'email':email})
-            update_db(df_readiness, readiness_raw, {'email':email})
+            # update_db(df_display, display_info, {})
+            # update_db(df_main, main_raw, {'email':email})
+            # update_db(df_sleep, sleep_raw, {'email':email})
+            # update_db(df_activity, activity_raw, {'email':email})
+            # update_db(df_readiness, readiness_raw, {'email':email})
 
             return Response(
                 response=json.dumps({'message': "success", 'data': records}),
