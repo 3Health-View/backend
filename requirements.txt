@@ -2,6 +2,7 @@ firebase_admin
 flask
 flask-bcrypt
 flask-cors
+pandas
 PyJWT
 python-dotenv
 requests
