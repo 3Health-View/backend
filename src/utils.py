@@ -1,12 +1,40 @@
 import pandas as pd
 from src.db.firestore import db
+import requests
 
-def update_db(dataframe:pd.DataFrame, collection:db.collection, to_add:dict()):
-     for i, row in dataframe.iterrows():
+def fetch_data(url, params, headers):
+    response = requests.get(url, headers=headers, params=params)
+    response.raise_for_status()
+    return response.json()
+
+def update_db(dataframe:pd.DataFrame, collection:db.collection):
+    batch = db.batch()
+
+    for i, row in dataframe.iterrows():
         record = row.to_dict()
-        record.update(to_add)
-        day_check = collection.where('day', '==', row['day']).get()
-        if day_check:
-            for doc in day_check:
-                doc.reference.delete()
-        collection.add(record)
+        doc_ref = collection.document()
+        batch.set(doc_ref, record)
+
+         # Firestore allows a maximum of 500 operations per batch
+        if (i + 1) % 500 == 0:
+            batch.commit()
+            batch = db.batch()
+    batch.commit()
+
+def delete_email_data(collection: db.collection, email: str):
+    try:
+        to_remove = collection.where('email', '==', email).stream()
+        batch = db.batch()
+        count = 0
+        for doc in to_remove:
+            batch.delete(doc.reference)
+            count += 1
+            # Firestore allows a maximum of 500 operations per batch
+            if count == 500:
+                batch.commit()
+                batch = db.batch()
+                count = 0
+        if count > 0:
+            batch.commit()
+    except Exception as e:
+        print(f"Error deleting data from {collection.id} for {email}: {e}")
