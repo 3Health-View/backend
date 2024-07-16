@@ -1,6 +1,5 @@
 from flask import request, Response, json, Blueprint
 import os
-import requests
 import pandas as pd
 from src.db.firestore import db
 import jwt
@@ -9,7 +8,6 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import zlib
 import base64
-
 
 data = Blueprint('data', __name__)
 display_info = db.collection('display_info')
@@ -224,6 +222,8 @@ def get_display_info():
         
         # Display info data
         df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
+
+        df.sort_values(by='day', ascending=False, inplace=True)
 
         # Display info, NoneType checks for subscripted dicts
         records = []
