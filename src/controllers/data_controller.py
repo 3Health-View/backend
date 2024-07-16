@@ -84,61 +84,62 @@ def update_scores():
         df_sleep = pd.DataFrame(responses['sleep']['data'])
         df_activity = pd.DataFrame(responses['activity']['data'])
         df_readiness = pd.DataFrame(responses['readiness']['data'])
-        
-        # Display info data
-        df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
-        # Cleaning
-        df['contributors'] = df['contributors'].apply(lambda x: None if pd.isna(x) else x)
-
-        # met is a dict, items a list of avg movement level every 60 secs, 1440 per day, breaks database, so we compress
-        for index, row in df_activity.iterrows():
-            items = row['met']['items']
-            items_bytes = str(items).encode('utf-8')
-            compressed = zlib.compress(items_bytes)
-            compressed_base64 = base64.b64encode(compressed).decode('utf-8')
-            df_activity.at[index, 'met']['items'] = compressed_base64
-
-        # Decompression Code
-        # for index, row in df_activity.iterrows():
-        #     compressed_base64 = row['met']['items']
-        #     compressed_bytes = base64.b64decode(compressed_base64)
-        #     decompressed_bytes = zlib.decompress(compressed_bytes)
-        #     decompressed_items = eval(decompressed_bytes.decode('utf-8'))
-        #     df_activity.at[index, 'met']['items'] = decompressed_items
-
-        # Display info, NoneType checks for subscripted dicts
         records = []
-        for i, row in df.iterrows():
-            records.append({
-                "day": row["day"],
-                "sleep_score": row["score"],
-                "readiness_score": row.get("readiness", {}).get("score") if isinstance(row.get("readiness"), dict) else None,
-                "activity_score": row["activity_score"],
-                "efficiency": row["efficiency"],
-                "restfulness": row.get("contributors", {}).get("restfulness") if isinstance(row.get("contributors"), dict) else None,
-                "total_sleep": row["total_sleep_duration"],
-                "awake": row["awake_time"],
-                "rem_sleep": row["rem_sleep_duration"],
-                "light_sleep": row["light_sleep_duration"],
-                "deep_sleep": row["deep_sleep_duration"],
-                "latency": row["latency"],
-                "bedtime_start": row["bedtime_start"],
-                "bedtime_end": row["bedtime_end"],
-                "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else None,
-                "average_heart_rate": row["average_heart_rate"],
-                "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else None,
-                "average_hrv": row["average_hrv"]
-            })
 
-        df_display = pd.DataFrame(records)
-        dataframes = [df_display, df_main, df_sleep, df_activity, df_readiness]
-        for dataframe in dataframes:
-            dataframe['email'] = email
-        update_db(df_display, display_info)
-        update_db(df_main, main_raw)
-        update_db(df_sleep, sleep_raw)
-        update_db(df_activity, activity_raw)
-        update_db(df_readiness, readiness_raw)
+        if len(df_main) > 0:
+            # Display info data
+            df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
+            # Cleaning
+            df['contributors'] = df['contributors'].apply(lambda x: None if pd.isna(x) else x)
+
+            # met is a dict, items a list of avg movement level every 60 secs, 1440 per day, breaks database, so we compress
+            for index, row in df_activity.iterrows():
+                items = row['met']['items']
+                items_bytes = str(items).encode('utf-8')
+                compressed = zlib.compress(items_bytes)
+                compressed_base64 = base64.b64encode(compressed).decode('utf-8')
+                df_activity.at[index, 'met']['items'] = compressed_base64
+
+            # Decompression Code
+            # for index, row in df_activity.iterrows():
+            #     compressed_base64 = row['met']['items']
+            #     compressed_bytes = base64.b64decode(compressed_base64)
+            #     decompressed_bytes = zlib.decompress(compressed_bytes)
+            #     decompressed_items = eval(decompressed_bytes.decode('utf-8'))
+            #     df_activity.at[index, 'met']['items'] = decompressed_items
+
+            # Display info, NoneType checks for subscripted dicts
+            for i, row in df.iterrows():
+                records.append({
+                    "day": row["day"],
+                    "sleep_score": row["score"],
+                    "readiness_score": row.get("readiness", {}).get("score") if isinstance(row.get("readiness"), dict) else None,
+                    "activity_score": row["activity_score"],
+                    "efficiency": row["efficiency"],
+                    "restfulness": row.get("contributors", {}).get("restfulness") if isinstance(row.get("contributors"), dict) else None,
+                    "total_sleep": row["total_sleep_duration"],
+                    "awake": row["awake_time"],
+                    "rem_sleep": row["rem_sleep_duration"],
+                    "light_sleep": row["light_sleep_duration"],
+                    "deep_sleep": row["deep_sleep_duration"],
+                    "latency": row["latency"],
+                    "bedtime_start": row["bedtime_start"],
+                    "bedtime_end": row["bedtime_end"],
+                    "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else None,
+                    "average_heart_rate": row["average_heart_rate"],
+                    "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else None,
+                    "average_hrv": row["average_hrv"]
+                })
+
+            df_display = pd.DataFrame(records)
+            dataframes = [df_display, df_main, df_sleep, df_activity, df_readiness]
+            for dataframe in dataframes:
+                dataframe['email'] = email
+            update_db(df_display, display_info)
+            update_db(df_main, main_raw)
+            update_db(df_sleep, sleep_raw)
+            update_db(df_activity, activity_raw)
+            update_db(df_readiness, readiness_raw)
 
         return Response(
             response=json.dumps({'message': "success", 'data': records}),
@@ -219,46 +220,40 @@ def get_display_info():
             )
         df_sleep = pd.DataFrame(responses['sleep']['data'])
         df_activity = pd.DataFrame(responses['activity']['data'])
-        
-        # Display info data
-        df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
-
-        df.fillna(value=0, inplace=True)
-        df.sort_values(by='day', ascending=False, inplace=True)
-
-        # Display info, NoneType checks for subscripted dicts
         records = []
-        for i, row in df.iterrows():
-            records.append({
-                "day": row["day"],
-                "sleep_score": row["score"],
-                "readiness_score": row.get("readiness", {}).get("score") if isinstance(row.get("readiness"), dict) else None,
-                "activity_score": row["activity_score"],
-                "efficiency": row["efficiency"],
-                "restfulness": row.get("contributors", {}).get("restfulness") if isinstance(row.get("contributors"), dict) else None,
-                "total_sleep": row["total_sleep_duration"],
-                "awake": row["awake_time"],
-                "rem_sleep": row["rem_sleep_duration"],
-                "light_sleep": row["light_sleep_duration"],
-                "deep_sleep": row["deep_sleep_duration"],
-                "latency": row["latency"],
-                "bedtime_start": row["bedtime_start"],
-                "bedtime_end": row["bedtime_end"],
-                "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else None,
-                "average_heart_rate": row["average_heart_rate"],
-                "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else None,
-                "average_hrv": row["average_hrv"]
-            })
+
+        if len(df_main) > 0:
+            # Display info data
+            df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
+
+            # df.sort_values(by='day', ascending=False)
+
+            # Display info, NoneType checks for subscripted dicts
+            for i, row in df.iterrows():
+                records.append({
+                    "day": row["day"],
+                    "sleep_score": row["score"],
+                    "readiness_score": row.get("readiness", {}).get("score") if isinstance(row.get("readiness"), dict) else None,
+                    "activity_score": row["activity_score"],
+                    "efficiency": row["efficiency"],
+                    "restfulness": row.get("contributors", {}).get("restfulness") if isinstance(row.get("contributors"), dict) else None,
+                    "total_sleep": row["total_sleep_duration"],
+                    "awake": row["awake_time"],
+                    "rem_sleep": row["rem_sleep_duration"],
+                    "light_sleep": row["light_sleep_duration"],
+                    "deep_sleep": row["deep_sleep_duration"],
+                    "latency": row["latency"],
+                    "bedtime_start": row["bedtime_start"],
+                    "bedtime_end": row["bedtime_end"],
+                    "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else None,
+                    "average_heart_rate": row["average_heart_rate"],
+                    "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else None,
+                    "average_hrv": row["average_hrv"]
+                })
 
         display_info_stream = display_info.where('email', '==', email).stream()
         for doc in display_info_stream:
             records.append(doc.to_dict())
-
-        for record in records:
-            if record.get("average_hrv") is None:
-                record["average_hrv"] = 0
-            if record.get("readiness_score") is None:
-                record["readiness_score"] = 0
 
         return Response(
             response=json.dumps({'message': "success", 'data': records}),
