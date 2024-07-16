@@ -37,7 +37,7 @@ def update_scores():
         except IndexError:
             current_latest = '1970-01-01'
         start_date = (datetime.strptime(current_latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-        end_date = datetime.now().strftime("%Y-%m-%d")
+        end_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
         end_date_activity = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
         params={ 
@@ -175,7 +175,7 @@ def get_display_info():
         except IndexError:
             current_latest = '1970-01-01'
         start_date = (datetime.strptime(current_latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-        end_date = datetime.now().strftime("%Y-%m-%d")
+        end_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
         end_date_activity = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
         params={ 
