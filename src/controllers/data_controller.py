@@ -223,7 +223,7 @@ def get_display_info():
         # Display info data
         df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
 
-        df.fillna(value=None, inplace=True)
+        df.fillna(value=0, inplace=True)
         df.sort_values(by='day', ascending=False, inplace=True)
 
         # Display info, NoneType checks for subscripted dicts
@@ -253,6 +253,12 @@ def get_display_info():
         display_info_stream = display_info.where('email', '==', email).stream()
         for doc in display_info_stream:
             records.append(doc.to_dict())
+
+        for record in records:
+            if record.get("average_hrv") is None:
+                record["average_hrv"] = 0
+            if record.get("readiness_score") is None:
+                record["readiness_score"] = 0
 
         return Response(
             response=json.dumps({'message': "success", 'data': records}),
