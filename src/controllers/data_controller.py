@@ -223,6 +223,7 @@ def get_display_info():
         # Display info data
         df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
 
+        df.fillna(value=None, inplace=True)
         df.sort_values(by='day', ascending=False, inplace=True)
 
         # Display info, NoneType checks for subscripted dicts
