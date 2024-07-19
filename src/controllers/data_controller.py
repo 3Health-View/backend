@@ -249,7 +249,8 @@ def get_display_info():
                     "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else None,
                     "average_heart_rate": row["average_heart_rate"],
                     "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else None,
-                    "average_hrv": row["average_hrv"]
+                    "average_hrv": row["average_hrv"],
+                    "type": row["type"]
                 })
 
         display_info_stream = display_info.where('email', '==', email).stream()
