@@ -143,18 +143,18 @@ def update_scores():
             dataframes = [df_display, df_main, df_sleep, df_activity, df_readiness, df_sleep_time]
             for dataframe in dataframes:
                 dataframe['email'] = email
-            # update_db(df_display, display_info)
-            # update_db(df_main, main_raw)
-            # update_db(df_sleep, sleep_raw)
-            # update_db(df_activity, activity_raw)
-            # update_db(df_readiness, readiness_raw)
-            # update_db(df_sleep_time, sleep_time_raw)
-            df_display.to_json("display_info.json")
-            df_main.to_json("main_raw.json")
-            df_sleep.to_json("sleep_raw.json")
-            df_activity.to_json("activity_raw.json")
-            df_readiness.to_json("readiness_raw.json")
-            df_sleep_time.to_json("sleep_time_raw.json")
+            update_db(df_display, display_info)
+            update_db(df_main, main_raw)
+            update_db(df_sleep, sleep_raw)
+            update_db(df_activity, activity_raw)
+            update_db(df_readiness, readiness_raw)
+            update_db(df_sleep_time, sleep_time_raw)
+            # df_display.to_json("display_info.json")
+            # df_main.to_json("main_raw.json")
+            # df_sleep.to_json("sleep_raw.json")
+            # df_activity.to_json("activity_raw.json")
+            # df_readiness.to_json("readiness_raw.json")
+            # df_sleep_time.to_json("sleep_time_raw.json")
 
         return Response(
             response=json.dumps({'message': "success", 'data': records}),
