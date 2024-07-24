@@ -241,7 +241,8 @@ def get_display_info():
             # Display info data
             df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
 
-            # df.sort_values(by='day', ascending=False)
+            df.fillna(value=0, inplace=True)
+            df.sort_values(by='day', ascending=False, inplace=True)
 
             # Display info, NoneType checks for subscripted dicts
             for i, row in df.iterrows():
@@ -263,7 +264,8 @@ def get_display_info():
                     "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else None,
                     "average_heart_rate": row["average_heart_rate"],
                     "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else None,
-                    "average_hrv": row["average_hrv"]
+                    "average_hrv": row["average_hrv"],
+                    "type": row["type"]
                 })
 
         display_info_stream = display_info.where('email', '==', email).stream()
