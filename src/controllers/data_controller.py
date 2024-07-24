@@ -15,6 +15,7 @@ main_raw = db.collection('main_raw')
 activity_raw = db.collection('activity_raw')
 readiness_raw = db.collection('readiness_raw')
 sleep_raw = db.collection('sleep_raw')
+sleep_time_raw = db.collection('sleep_time_raw')
 
 @data.route('/update-scores', methods = ['POST'])
 def update_scores():
@@ -30,6 +31,7 @@ def update_scores():
         sleep_url = f"{os.getenv('OURA_API_BASE_URI')}/daily_sleep"
         activity_url = f"{os.getenv('OURA_API_BASE_URI')}/daily_activity"
         readiness_url = f"{os.getenv('OURA_API_BASE_URI')}/daily_readiness"
+        sleep_time_url = f"{os.getenv('OURA_API_BASE_URI')}/sleep_time"
 
         # Get latest day in database
         try:
@@ -58,7 +60,8 @@ def update_scores():
                 executor.submit(fetch_data, main_url, params, headers): 'main',
                 executor.submit(fetch_data, sleep_url, params, headers): 'sleep',
                 executor.submit(fetch_data, activity_url, activity_params, headers): 'activity',
-                executor.submit(fetch_data, readiness_url, params, headers): 'readiness'
+                executor.submit(fetch_data, readiness_url, params, headers): 'readiness',
+                executor.submit(fetch_data, sleep_time_url, params, headers): 'sleep_time'
             }
             responses = {}
             for future in as_completed(futures):
@@ -84,11 +87,12 @@ def update_scores():
         df_sleep = pd.DataFrame(responses['sleep']['data'])
         df_activity = pd.DataFrame(responses['activity']['data'])
         df_readiness = pd.DataFrame(responses['readiness']['data'])
+        df_sleep_time = pd.DataFrame(responses['sleep_time']['data'])
         records = []
 
         if len(df_main) > 0:
             # Display info data
-            df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
+            df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left").merge(df_sleep_time[["day", "optimal_bedtime", "recommendation", "status"]], on="day", how="right")
             # Cleaning
             df['contributors'] = df['contributors'].apply(lambda x: None if pd.isna(x) else x)
 
@@ -128,18 +132,29 @@ def update_scores():
                     "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else None,
                     "average_heart_rate": row["average_heart_rate"],
                     "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else None,
-                    "average_hrv": row["average_hrv"]
+                    "average_hrv": row["average_hrv"],
+                    "type": row["type"],
+                    "oura_optimal_bedtime": row["optimal_bedtime"], 
+                    "oura_recommendation": row["recommendation"], 
+                    "oura_status": row["status"]
                 })
 
             df_display = pd.DataFrame(records)
-            dataframes = [df_display, df_main, df_sleep, df_activity, df_readiness]
+            dataframes = [df_display, df_main, df_sleep, df_activity, df_readiness, df_sleep_time]
             for dataframe in dataframes:
                 dataframe['email'] = email
-            update_db(df_display, display_info)
-            update_db(df_main, main_raw)
-            update_db(df_sleep, sleep_raw)
-            update_db(df_activity, activity_raw)
-            update_db(df_readiness, readiness_raw)
+            # update_db(df_display, display_info)
+            # update_db(df_main, main_raw)
+            # update_db(df_sleep, sleep_raw)
+            # update_db(df_activity, activity_raw)
+            # update_db(df_readiness, readiness_raw)
+            # update_db(df_sleep_time, sleep_time_raw)
+            df_display.to_json("display_info.json")
+            df_main.to_json("main_raw.json")
+            df_sleep.to_json("sleep_raw.json")
+            df_activity.to_json("activity_raw.json")
+            df_readiness.to_json("readiness_raw.json")
+            df_sleep_time.to_json("sleep_time_raw.json")
 
         return Response(
             response=json.dumps({'message': "success", 'data': records}),
@@ -277,7 +292,7 @@ def remove_data():
 
         email = decoded.get('email')
         
-        collections = [display_info, main_raw, activity_raw, readiness_raw, sleep_raw]
+        collections = [display_info, main_raw, activity_raw, readiness_raw, sleep_raw, sleep_time_raw]
 
         # Multithreading deletion on all collections simultaneously
         with ThreadPoolExecutor() as executor:
