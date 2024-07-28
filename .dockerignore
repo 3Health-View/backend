@@ -1,0 +1,9 @@
+/venv
+.env
+fantasyleagueoflegends-bdb374e7be01.json
+.git
+__pycache__
+*.pyc
+.DS_Store
+node_modules
+coverage
