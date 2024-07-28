@@ -6,3 +6,4 @@ pandas
 PyJWT
 python-dotenv
 requests
+waitress
