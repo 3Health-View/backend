@@ -1,0 +1,42 @@
+name: Build and Push Images
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          workload_identity_provider: projects/214580929078/locations/global/workloadIdentityPools/my-pool/providers/my-provider
+          service_account: github@fantasyleagueoflegends.iam.gserviceaccount.com
+      - name: Login to GAR
+        uses: docker/login-action@v3
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+      - name: Get Tag
+        id: get-tag
+        run: echo ::set-output name=short_ref::${GITHUB_REF#refs/*/}
+      - name: Build, Tag, Push Docker Image to GAR
+        id: docker-build-tag-push
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: |
+            us-central1-docker.pkg.dev/fantasyleagueoflegends/hv/hv-backend:${{ steps.get-tag.outputs.short_ref }}
+            us-central1-docker.pkg.dev/fantasyleagueoflegends/hv/hv-backend:latest
