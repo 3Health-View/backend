@@ -95,6 +95,8 @@ def update_scores():
             df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left").merge(df_sleep_time[["day", "optimal_bedtime", "recommendation", "status"]], on="day", how="right")
             # Cleaning
             df['contributors'] = df['contributors'].apply(lambda x: None if pd.isna(x) else x)
+            df.fillna(value=0, inplace=True)
+            df.sort_values(by='day', ascending=False, inplace=True)
 
             # met is a dict, items a list of avg movement level every 60 secs, 1440 per day, breaks database, so we compress
             for index, row in df_activity.iterrows():
@@ -117,10 +119,10 @@ def update_scores():
                 records.append({
                     "day": row["day"],
                     "sleep_score": row["score"],
-                    "readiness_score": row.get("readiness", {}).get("score") if isinstance(row.get("readiness"), dict) else None,
+                    "readiness_score": row.get("readiness", {}).get("score") if isinstance(row.get("readiness"), dict) else 0,
                     "activity_score": row["activity_score"],
                     "efficiency": row["efficiency"],
-                    "restfulness": row.get("contributors", {}).get("restfulness") if isinstance(row.get("contributors"), dict) else None,
+                    "restfulness": row.get("contributors", {}).get("restfulness") if isinstance(row.get("contributors"), dict) else 0,
                     "total_sleep": row["total_sleep_duration"],
                     "awake": row["awake_time"],
                     "rem_sleep": row["rem_sleep_duration"],
@@ -129,9 +131,9 @@ def update_scores():
                     "latency": row["latency"],
                     "bedtime_start": row["bedtime_start"],
                     "bedtime_end": row["bedtime_end"],
-                    "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else None,
+                    "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else list(),
                     "average_heart_rate": row["average_heart_rate"],
-                    "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else None,
+                    "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else list(),
                     "average_hrv": row["average_hrv"],
                     "type": row["type"],
                     "oura_optimal_bedtime": row["optimal_bedtime"], 
@@ -249,10 +251,10 @@ def get_display_info():
                 records.append({
                     "day": row["day"],
                     "sleep_score": row["score"],
-                    "readiness_score": row.get("readiness", {}).get("score") if isinstance(row.get("readiness"), dict) else None,
+                    "readiness_score": row.get("readiness", {}).get("score") if isinstance(row.get("readiness"), dict) else 0,
                     "activity_score": row["activity_score"],
                     "efficiency": row["efficiency"],
-                    "restfulness": row.get("contributors", {}).get("restfulness") if isinstance(row.get("contributors"), dict) else None,
+                    "restfulness": row.get("contributors", {}).get("restfulness") if isinstance(row.get("contributors"), dict) else 0,
                     "total_sleep": row["total_sleep_duration"],
                     "awake": row["awake_time"],
                     "rem_sleep": row["rem_sleep_duration"],
@@ -261,9 +263,9 @@ def get_display_info():
                     "latency": row["latency"],
                     "bedtime_start": row["bedtime_start"],
                     "bedtime_end": row["bedtime_end"],
-                    "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else None,
+                    "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else list(),
                     "average_heart_rate": row["average_heart_rate"],
-                    "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else None,
+                    "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else list(),
                     "average_hrv": row["average_hrv"],
                     "type": row["type"]
                 })
