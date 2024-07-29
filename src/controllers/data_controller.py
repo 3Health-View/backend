@@ -274,6 +274,8 @@ def get_display_info():
         for doc in display_info_stream:
             records.append(doc.to_dict())
 
+        records.sort(key=lambda x: x['day'], reverse=True)
+
         return Response(
             response=json.dumps({'message': "success", 'data': records}),
             status=200,
