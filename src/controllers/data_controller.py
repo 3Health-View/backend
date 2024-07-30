@@ -2,6 +2,7 @@ from flask import request, Response, json, Blueprint
 import os
 import pandas as pd
 from src.db.firestore import db
+from src.db.redis import setDisplayInfo, get
 import jwt
 from src.utils import update_db, delete_email_data, fetch_data
 from datetime import datetime, timedelta
@@ -182,105 +183,117 @@ def get_display_info():
         email = decoded.get('email')
         oura_token = decoded.get('oura_token')
 
-        main_url = f"{os.getenv('OURA_API_BASE_URI')}/sleep" 
-        sleep_url = f"{os.getenv('OURA_API_BASE_URI')}/daily_sleep"
-        activity_url = f"{os.getenv('OURA_API_BASE_URI')}/daily_activity"
+        redis_data = get(token)
 
-        # Get latest day in database
-        try:
-            current_latest = main_raw.where('email', '==', email).order_by('day', 'DESCENDING').limit(1).get()[0].to_dict()['day']
-        except IndexError:
-            current_latest = '1970-01-01'
-        start_date = (datetime.strptime(current_latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-        end_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-        end_date_activity = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        if(redis_data == None):
+            print("Cache Miss")
+            main_url = f"{os.getenv('OURA_API_BASE_URI')}/sleep" 
+            sleep_url = f"{os.getenv('OURA_API_BASE_URI')}/daily_sleep"
+            activity_url = f"{os.getenv('OURA_API_BASE_URI')}/daily_activity"
 
-        params={ 
-            'start_date': start_date, 
-            'end_date': end_date
-        }
-        activity_params={
-            'start_date':start_date,
-            'end_date': end_date_activity
-        }
-        headers = { 
-        'Authorization': f"Bearer {oura_token}" 
-        }
+            # Get latest day in database
+            try:
+                current_latest = main_raw.where('email', '==', email).order_by('day', 'DESCENDING').limit(1).get()[0].to_dict()['day']
+            except IndexError:
+                current_latest = '1970-01-01'
+            start_date = (datetime.strptime(current_latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+            end_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+            end_date_activity = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
-        # Multithreading queries to Oura
-        with ThreadPoolExecutor() as executor:
-            futures = {
-                executor.submit(fetch_data, main_url, params, headers): 'main',
-                executor.submit(fetch_data, sleep_url, params, headers): 'sleep',
-                executor.submit(fetch_data, activity_url, activity_params, headers): 'activity',
+            params={ 
+                'start_date': start_date, 
+                'end_date': end_date
             }
-            responses = {}
-            for future in as_completed(futures):
-                url_type = futures[future]
-                try:
-                    data = future.result()
-                    responses[url_type] = data
-                except Exception as e:
-                    return Response(
-                        response=json.dumps({'message': f"Error getting {url_type} data", 'error': str(e)}),
-                        status=500,
-                        mimetype='application/json'
-                    )
+            activity_params={
+                'start_date':start_date,
+                'end_date': end_date_activity
+            }
+            headers = { 
+            'Authorization': f"Bearer {oura_token}" 
+            }
 
-        try:
-            df_main = pd.DataFrame(responses['main']['data'])
-        except KeyError:
+            # Multithreading queries to Oura
+            with ThreadPoolExecutor() as executor:
+                futures = {
+                    executor.submit(fetch_data, main_url, params, headers): 'main',
+                    executor.submit(fetch_data, sleep_url, params, headers): 'sleep',
+                    executor.submit(fetch_data, activity_url, activity_params, headers): 'activity',
+                }
+                responses = {}
+                for future in as_completed(futures):
+                    url_type = futures[future]
+                    try:
+                        data = future.result()
+                        responses[url_type] = data
+                    except Exception as e:
+                        return Response(
+                            response=json.dumps({'message': f"Error getting {url_type} data", 'error': str(e)}),
+                            status=500,
+                            mimetype='application/json'
+                        )
+
+            try:
+                df_main = pd.DataFrame(responses['main']['data'])
+            except KeyError:
+                return Response(
+                    response=json.dumps({'message': "Error getting data", 'error': responses['main']}),
+                    status=500,
+                    mimetype='application/json'
+                )
+            df_sleep = pd.DataFrame(responses['sleep']['data'])
+            df_activity = pd.DataFrame(responses['activity']['data'])
+            records = []
+
+            if len(df_main) > 0:
+                # Display info data
+                df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
+
+                df.fillna(value=0, inplace=True)
+                df.sort_values(by='day', ascending=False, inplace=True)
+
+                # Display info, NoneType checks for subscripted dicts
+                for i, row in df.iterrows():
+                    records.append({
+                        "day": row["day"],
+                        "sleep_score": row["score"],
+                        "readiness_score": row.get("readiness", {}).get("score") if isinstance(row.get("readiness"), dict) else 0,
+                        "activity_score": row["activity_score"],
+                        "efficiency": row["efficiency"],
+                        "restfulness": row.get("contributors", {}).get("restfulness") if isinstance(row.get("contributors"), dict) else 0,
+                        "total_sleep": row["total_sleep_duration"],
+                        "awake": row["awake_time"],
+                        "rem_sleep": row["rem_sleep_duration"],
+                        "light_sleep": row["light_sleep_duration"],
+                        "deep_sleep": row["deep_sleep_duration"],
+                        "latency": row["latency"],
+                        "bedtime_start": row["bedtime_start"],
+                        "bedtime_end": row["bedtime_end"],
+                        "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else list(),
+                        "average_heart_rate": row["average_heart_rate"],
+                        "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else list(),
+                        "average_hrv": row["average_hrv"],
+                        "type": row["type"]
+                    })
+
+            display_info_stream = display_info.where('email', '==', email).stream()
+            for doc in display_info_stream:
+                records.append(doc.to_dict())
+
+            records.sort(key=lambda x: x['day'], reverse=True)
+            setDisplayInfo(token, records)
+
             return Response(
-                response=json.dumps({'message': "Error getting data", 'error': responses['main']}),
-                status=500,
+                response=json.dumps({'message': "success", 'data': records}),
+                status=200,
                 mimetype='application/json'
             )
-        df_sleep = pd.DataFrame(responses['sleep']['data'])
-        df_activity = pd.DataFrame(responses['activity']['data'])
-        records = []
-
-        if len(df_main) > 0:
-            # Display info data
-            df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
-
-            df.fillna(value=0, inplace=True)
-            df.sort_values(by='day', ascending=False, inplace=True)
-
-            # Display info, NoneType checks for subscripted dicts
-            for i, row in df.iterrows():
-                records.append({
-                    "day": row["day"],
-                    "sleep_score": row["score"],
-                    "readiness_score": row.get("readiness", {}).get("score") if isinstance(row.get("readiness"), dict) else 0,
-                    "activity_score": row["activity_score"],
-                    "efficiency": row["efficiency"],
-                    "restfulness": row.get("contributors", {}).get("restfulness") if isinstance(row.get("contributors"), dict) else 0,
-                    "total_sleep": row["total_sleep_duration"],
-                    "awake": row["awake_time"],
-                    "rem_sleep": row["rem_sleep_duration"],
-                    "light_sleep": row["light_sleep_duration"],
-                    "deep_sleep": row["deep_sleep_duration"],
-                    "latency": row["latency"],
-                    "bedtime_start": row["bedtime_start"],
-                    "bedtime_end": row["bedtime_end"],
-                    "heart_rate": row.get("heart_rate", {}).get("items") if isinstance(row.get("heart_rate"), dict) else list(),
-                    "average_heart_rate": row["average_heart_rate"],
-                    "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else list(),
-                    "average_hrv": row["average_hrv"],
-                    "type": row["type"]
-                })
-
-        display_info_stream = display_info.where('email', '==', email).stream()
-        for doc in display_info_stream:
-            records.append(doc.to_dict())
-
-        records.sort(key=lambda x: x['day'], reverse=True)
-
-        return Response(
-            response=json.dumps({'message': "success", 'data': records}),
-            status=200,
-            mimetype='application/json'
-        )
+        else:
+            print("Cache Hit")
+            return Response(
+                response=json.dumps({'message': "success", 'data': redis_data}),
+                status=200,
+                mimetype='application/json'
+            )
     except Exception as e:
         return Response(
             response= json.dumps({'message': "Error has occurred", 'error': str(e)}),
