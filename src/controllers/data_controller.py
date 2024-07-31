@@ -1,14 +1,20 @@
 from flask import request, Response, json, Blueprint
 import os
+from dotenv import load_dotenv
 import pandas as pd
 from src.db.firestore import db
 from src.db.redis import setDisplayInfo, get
 import jwt
-from src.utils import update_db, delete_email_data, fetch_data
+from src.utils import update_db, delete_email_data, fetch_data, load_label_encoder, default_values
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import zlib
 import base64
+import mlflow
+import pickle
+import xgboost as xgb
+
+load_dotenv()
 
 data = Blueprint('data', __name__)
 display_info = db.collection('display_info')
@@ -17,6 +23,18 @@ activity_raw = db.collection('activity_raw')
 readiness_raw = db.collection('readiness_raw')
 sleep_raw = db.collection('sleep_raw')
 sleep_time_raw = db.collection('sleep_time_raw')
+
+
+mlflow.set_tracking_uri("https://mlflow.3hv.ethanwu.net")
+experiment = mlflow.get_experiment_by_name("XGBoost")
+runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], filter_string="tags.production = 'true'")
+run_id = ""
+for index, row in runs.iterrows():
+    if row["tags.mlflow.runName"] == "Production":
+        run_id = row["run_id"]
+
+model_uri = f"runs:/{run_id}/model"
+loaded_model = mlflow.pyfunc.load_model(model_uri)
 
 @data.route('/update-scores', methods = ['POST'])
 def update_scores():
@@ -95,13 +113,10 @@ def update_scores():
             # Display info data
             df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
             if(len(df_sleep_time) > 0):
-                df = df.merge(df_sleep_time[["day", "optimal_bedtime", "recommendation", "status"]], on="day", how="right")
+                df = df.merge(df_sleep_time[["day", "recommendation", "status"]], on="day", how="right")
             # Cleaning
             df['contributors'] = df['contributors'].apply(lambda x: {} if pd.isna(x) else x)
-            df['optimal_bedtime'] = df['optimal_bedtime'].apply(lambda x: {} if pd.isna(x) else x)
-            df['recommendation'] = df['recommendation'].apply(lambda x: "" if pd.isna(x) else x)
 
-            df.fillna(value="null", inplace=True)
             df.sort_values(by='day', ascending=False, inplace=True)
 
             # met is a dict, items a list of avg movement level every 60 secs, 1440 per day, breaks database, so we compress
@@ -142,7 +157,6 @@ def update_scores():
                     "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else list(),
                     "average_hrv": row["average_hrv"],
                     "type": row["type"],
-                    "oura_optimal_bedtime": row.get("optimal_bedtime", dict()), 
                     "oura_recommendation": row.get("recommendation", ""), 
                     "oura_status": row.get("status", "")
                 })
@@ -151,18 +165,29 @@ def update_scores():
             dataframes = [df_display, df_main, df_sleep, df_activity, df_readiness, df_sleep_time]
             for dataframe in dataframes:
                 dataframe['email'] = email
+            
+            df_tmp = df_display.copy(deep=True)
+            df_tmp['day'] = pd.to_datetime(df_tmp['day'], utc=True).dt.normalize()
+            df_tmp['bedtime_start'] = pd.to_datetime(df_tmp['bedtime_start'], utc=True)
+            df_tmp['bedtime_start'] = (df_tmp['bedtime_start'] - df_tmp['day']).dt.total_seconds()
+            df_tmp['bedtime_end'] = pd.to_datetime(df_tmp['bedtime_end'], utc=True)
+            df_tmp['bedtime_end'] = (df_tmp['bedtime_end'] - df_tmp['day']).dt.total_seconds()
+            df_main_predict = df_tmp[["sleep_score", "readiness_score", "activity_score", "efficiency", "restfulness", "total_sleep", "awake", "rem_sleep", "light_sleep", "deep_sleep", "latency", "bedtime_start", "bedtime_end", "average_heart_rate", "average_hrv"]]
+
+            artifact_path = 'label_encoder.pkl'
+            local_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact_path)
+            label_encoder = load_label_encoder(local_path)
+            recommendations = loaded_model.predict(df_main_predict)
+            recommendation_original = label_encoder.inverse_transform(recommendations)
+
+            df_display["recommendation"] = recommendation_original
+
             update_db(df_display, display_info)
             update_db(df_main, main_raw)
             update_db(df_sleep, sleep_raw)
             update_db(df_activity, activity_raw)
             update_db(df_readiness, readiness_raw)
             update_db(df_sleep_time, sleep_time_raw)
-            # df_display.to_json("display_info.json")
-            # df_main.to_json("main_raw.json")
-            # df_sleep.to_json("sleep_raw.json")
-            # df_activity.to_json("activity_raw.json")
-            # df_readiness.to_json("readiness_raw.json")
-            # df_sleep_time.to_json("sleep_time_raw.json")
 
         return Response(
             response=json.dumps({'message': "success", 'data': records}),
@@ -255,7 +280,6 @@ def get_display_info():
 
                 df['contributors'] = df['contributors'].apply(lambda x: {} if pd.isna(x) else x)
 
-                df.fillna(value="null", inplace=True)
                 df.sort_values(by='day', ascending=False, inplace=True)
 
                 # Display info, NoneType checks for subscripted dicts
@@ -279,8 +303,40 @@ def get_display_info():
                         "average_heart_rate": row["average_heart_rate"],
                         "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else list(),
                         "average_hrv": row["average_hrv"],
-                        "type": row["type"]
+                        "type": row["type"],
+                        "oura_recommendation": row.get("recommendation", ""), 
+                        "oura_status": row.get("status", ""),
                     })
+            
+            df_display = pd.DataFrame(records)
+            df_tmp = df_display.copy(deep=True)
+            df_tmp['day'] = pd.to_datetime(df_tmp['day'], utc=True).dt.normalize()
+            df_tmp['bedtime_start'] = pd.to_datetime(df_tmp['bedtime_start'], utc=True)
+            df_tmp['bedtime_start'] = (df_tmp['bedtime_start'] - df_tmp['day']).dt.total_seconds()
+            df_tmp['bedtime_end'] = pd.to_datetime(df_tmp['bedtime_end'], utc=True)
+            df_tmp['bedtime_end'] = (df_tmp['bedtime_end'] - df_tmp['day']).dt.total_seconds()
+            df_main_predict = df_tmp[["sleep_score", "readiness_score", "activity_score", "efficiency", "restfulness", "total_sleep", "awake", "rem_sleep", "light_sleep", "deep_sleep", "latency", "bedtime_start", "bedtime_end", "average_heart_rate", "average_hrv"]]
+
+            artifact_path = 'label_encoder.pkl'
+            local_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact_path)
+            label_encoder = load_label_encoder(local_path)
+            recommendations = loaded_model.predict(df_main_predict)
+            recommendation_original = label_encoder.inverse_transform(recommendations)
+
+            df_display["recommendation"] = recommendation_original
+
+            for column in df_display.columns:
+                dtype = df_display[column].dtype
+                if dtype == 'object' and pd.api.types.is_categorical_dtype(df_display[column]):
+                    df_display[column].fillna(default_values['object'], inplace=True)
+                    df_display[column] = df_display[column].astype('category')
+                elif dtype == 'object':
+                    df_display[column].fillna(default_values['object'], inplace=True)
+                else:
+                    df_display[column].fillna(default_values[str(dtype)], inplace=True)
+                    df_display[column] = df_display[column].astype(dtype)
+
+            records = df_display.to_dict(orient='records')
 
             display_info_stream = display_info.where('email', '==', email).stream()
             for doc in display_info_stream:

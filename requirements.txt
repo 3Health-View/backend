@@ -8,3 +8,5 @@ python-dotenv
 redis
 requests
 waitress
+mlflow
+xgboost

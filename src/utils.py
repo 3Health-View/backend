@@ -1,6 +1,11 @@
 import pandas as pd
 from src.db.firestore import db
 import requests
+import pickle
+
+def load_label_encoder(filename):
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
 
 def fetch_data(url, params, headers):
     response = requests.get(url, headers=headers, params=params)
@@ -38,3 +43,10 @@ def delete_email_data(collection: db.collection, email: str):
             batch.commit()
     except Exception as e:
         print(f"Error deleting data from {collection.id} for {email}: {e}")
+
+default_values = {
+    'int64': 0,
+    'float64': 0.0,
+    'bool': False,
+    'object': 'Unknown'
+}
