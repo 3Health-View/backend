@@ -36,7 +36,7 @@ def update_scores():
 
         # Get latest day in database
         try:
-            current_latest = main_raw.where('email', '==', email).order_by('day', 'DESCENDING').limit(1).get()[0].to_dict()['day']
+            current_latest = display_info.where('email', '==', email).order_by('day', 'DESCENDING').limit(1).get()[0].to_dict()['day']
         except IndexError:
             current_latest = '1970-01-01'
         start_date = (datetime.strptime(current_latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -93,10 +93,15 @@ def update_scores():
 
         if len(df_main) > 0:
             # Display info data
-            df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left").merge(df_sleep_time[["day", "optimal_bedtime", "recommendation", "status"]], on="day", how="right")
+            df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
+            if(len(df_sleep_time) > 0):
+                df = df.merge(df_sleep_time[["day", "optimal_bedtime", "recommendation", "status"]], on="day", how="right")
             # Cleaning
-            df['contributors'] = df['contributors'].apply(lambda x: None if pd.isna(x) else x)
-            df.fillna(value=0, inplace=True)
+            df['contributors'] = df['contributors'].apply(lambda x: {} if pd.isna(x) else x)
+            df['optimal_bedtime'] = df['optimal_bedtime'].apply(lambda x: {} if pd.isna(x) else x)
+            df['recommendation'] = df['recommendation'].apply(lambda x: "" if pd.isna(x) else x)
+
+            df.fillna(value="null", inplace=True)
             df.sort_values(by='day', ascending=False, inplace=True)
 
             # met is a dict, items a list of avg movement level every 60 secs, 1440 per day, breaks database, so we compress
@@ -137,9 +142,9 @@ def update_scores():
                     "hrv": row.get("hrv", {}).get("items") if isinstance(row.get("hrv"), dict) else list(),
                     "average_hrv": row["average_hrv"],
                     "type": row["type"],
-                    "oura_optimal_bedtime": row["optimal_bedtime"], 
-                    "oura_recommendation": row["recommendation"], 
-                    "oura_status": row["status"]
+                    "oura_optimal_bedtime": row.get("optimal_bedtime", dict()), 
+                    "oura_recommendation": row.get("recommendation", ""), 
+                    "oura_status": row.get("status", "")
                 })
 
             df_display = pd.DataFrame(records)
@@ -193,7 +198,7 @@ def get_display_info():
 
             # Get latest day in database
             try:
-                current_latest = main_raw.where('email', '==', email).order_by('day', 'DESCENDING').limit(1).get()[0].to_dict()['day']
+                current_latest = display_info.where('email', '==', email).order_by('day', 'DESCENDING').limit(1).get()[0].to_dict()['day']
             except IndexError:
                 current_latest = '1970-01-01'
             start_date = (datetime.strptime(current_latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -248,7 +253,9 @@ def get_display_info():
                 # Display info data
                 df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
 
-                df.fillna(value=0, inplace=True)
+                df['contributors'] = df['contributors'].apply(lambda x: {} if pd.isna(x) else x)
+
+                df.fillna(value="null", inplace=True)
                 df.sort_values(by='day', ascending=False, inplace=True)
 
                 # Display info, NoneType checks for subscripted dicts
