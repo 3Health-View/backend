@@ -43,10 +43,6 @@ def update_scores():
         end_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
         end_date_activity = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
-        print(current_latest)
-        print(start_date)
-        print(end_date)
-
         params={ 
             'start_date': start_date, 
             'end_date': end_date
@@ -209,10 +205,6 @@ def get_display_info():
             end_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
             end_date_activity = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
-            print(current_latest)
-            print(start_date)
-            print(end_date)
-
             params={ 
                 'start_date': start_date, 
                 'end_date': end_date
@@ -261,7 +253,9 @@ def get_display_info():
                 # Display info data
                 df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
 
-                df.fillna(value=0, inplace=True)
+                df['contributors'] = df['contributors'].apply(lambda x: {} if pd.isna(x) else x)
+
+                df.fillna(value="null", inplace=True)
                 df.sort_values(by='day', ascending=False, inplace=True)
 
                 # Display info, NoneType checks for subscripted dicts
