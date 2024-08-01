@@ -162,9 +162,7 @@ def update_scores():
                 })
 
             df_display = pd.DataFrame(records)
-            dataframes = [df_display, df_main, df_sleep, df_activity, df_readiness, df_sleep_time]
-            for dataframe in dataframes:
-                dataframe['email'] = email
+            
             
             df_tmp = df_display.copy(deep=True)
             df_tmp['day'] = pd.to_datetime(df_tmp['day'], utc=True).dt.normalize()
@@ -182,12 +180,28 @@ def update_scores():
 
             df_display["recommendation"] = recommendation_original
 
+            dataframes = [df_display, df_main, df_sleep, df_activity, df_readiness, df_sleep_time]
+            for dataframe in dataframes:
+                dataframe['email'] = email
+                for column in dataframe.columns:
+                        dtype = dataframe[column].dtype
+                        if dtype == 'object' and pd.api.types.is_categorical_dtype(dataframe[column]):
+                            dataframe[column] = dataframe[column].fillna(default_values['object'])
+                            dataframe[column] = dataframe[column].astype('category')
+                        elif dtype == 'object':
+                            dataframe[column] = dataframe[column].fillna(default_values['object'])
+                        else:
+                            dataframe[column] = dataframe[column].fillna(default_values[str(dtype)])
+                            dataframe[column] = dataframe[column].astype(dtype)
+
             update_db(df_display, display_info)
             update_db(df_main, main_raw)
             update_db(df_sleep, sleep_raw)
             update_db(df_activity, activity_raw)
             update_db(df_readiness, readiness_raw)
             update_db(df_sleep_time, sleep_time_raw)
+
+            records = df_display.to_dict(orient='records')
 
         return Response(
             response=json.dumps({'message': "success", 'data': records}),
@@ -274,7 +288,8 @@ def get_display_info():
             df_activity = pd.DataFrame(responses['activity']['data'])
             records = []
 
-            if len(df_main) > 0:
+            if len(df_main) > 0 and len(df_sleep) > 0 and len(df_activity) > 0:
+            # if len(df_main) > 0:
                 # Display info data
                 df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
 
@@ -308,35 +323,35 @@ def get_display_info():
                         "oura_status": row.get("status", ""),
                     })
             
-            df_display = pd.DataFrame(records)
-            df_tmp = df_display.copy(deep=True)
-            df_tmp['day'] = pd.to_datetime(df_tmp['day'], utc=True).dt.normalize()
-            df_tmp['bedtime_start'] = pd.to_datetime(df_tmp['bedtime_start'], utc=True)
-            df_tmp['bedtime_start'] = (df_tmp['bedtime_start'] - df_tmp['day']).dt.total_seconds()
-            df_tmp['bedtime_end'] = pd.to_datetime(df_tmp['bedtime_end'], utc=True)
-            df_tmp['bedtime_end'] = (df_tmp['bedtime_end'] - df_tmp['day']).dt.total_seconds()
-            df_main_predict = df_tmp[["sleep_score", "readiness_score", "activity_score", "efficiency", "restfulness", "total_sleep", "awake", "rem_sleep", "light_sleep", "deep_sleep", "latency", "bedtime_start", "bedtime_end", "average_heart_rate", "average_hrv"]]
+                df_display = pd.DataFrame(records)
+                df_tmp = df_display.copy(deep=True)
+                df_tmp['day'] = pd.to_datetime(df_tmp['day'], utc=True).dt.normalize()
+                df_tmp['bedtime_start'] = pd.to_datetime(df_tmp['bedtime_start'], utc=True)
+                df_tmp['bedtime_start'] = (df_tmp['bedtime_start'] - df_tmp['day']).dt.total_seconds()
+                df_tmp['bedtime_end'] = pd.to_datetime(df_tmp['bedtime_end'], utc=True)
+                df_tmp['bedtime_end'] = (df_tmp['bedtime_end'] - df_tmp['day']).dt.total_seconds()
+                df_main_predict = df_tmp[["sleep_score", "readiness_score", "activity_score", "efficiency", "restfulness", "total_sleep", "awake", "rem_sleep", "light_sleep", "deep_sleep", "latency", "bedtime_start", "bedtime_end", "average_heart_rate", "average_hrv"]]
 
-            artifact_path = 'label_encoder.pkl'
-            local_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact_path)
-            label_encoder = load_label_encoder(local_path)
-            recommendations = loaded_model.predict(df_main_predict)
-            recommendation_original = label_encoder.inverse_transform(recommendations)
+                artifact_path = 'label_encoder.pkl'
+                local_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact_path)
+                label_encoder = load_label_encoder(local_path)
+                recommendations = loaded_model.predict(df_main_predict)
+                recommendation_original = label_encoder.inverse_transform(recommendations)
 
-            df_display["recommendation"] = recommendation_original
+                df_display["recommendation"] = recommendation_original
 
-            for column in df_display.columns:
-                dtype = df_display[column].dtype
-                if dtype == 'object' and pd.api.types.is_categorical_dtype(df_display[column]):
-                    df_display[column].fillna(default_values['object'], inplace=True)
-                    df_display[column] = df_display[column].astype('category')
-                elif dtype == 'object':
-                    df_display[column].fillna(default_values['object'], inplace=True)
-                else:
-                    df_display[column].fillna(default_values[str(dtype)], inplace=True)
-                    df_display[column] = df_display[column].astype(dtype)
+                for column in df_display.columns:
+                    dtype = df_display[column].dtype
+                    if dtype == 'object' and pd.api.types.is_categorical_dtype(df_display[column]):
+                        df_display[column] = df_display[column].fillna(default_values['object'])
+                        df_display[column] = df_display[column].astype('category')
+                    elif dtype == 'object':
+                        df_display[column] = df_display[column].fillna(default_values['object'])
+                    else:
+                        df_display[column] = df_display[column].fillna(default_values[str(dtype)])
+                        df_display[column] = df_display[column].astype(dtype)
 
-            records = df_display.to_dict(orient='records')
+                records = df_display.to_dict(orient='records')
 
             display_info_stream = display_info.where('email', '==', email).stream()
             for doc in display_info_stream:
