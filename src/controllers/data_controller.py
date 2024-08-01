@@ -113,7 +113,7 @@ def update_scores():
             # Display info data
             df = df_main.merge(df_sleep[["contributors", "day", "score"]], on='day', how='left').merge(df_activity.rename({"score":"activity_score"}, axis=1)[["day","activity_score"]], on="day", how="left")
             if(len(df_sleep_time) > 0):
-                df = df.merge(df_sleep_time[["day", "recommendation", "status"]], on="day", how="right")
+                df = df.merge(df_sleep_time[["day", "recommendation", "status"]], on="day", how="left")
             # Cleaning
             df['contributors'] = df['contributors'].apply(lambda x: {} if pd.isna(x) else x)
 
